@@ -1,7 +1,12 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\{
+    AnswerController,
+    AuthController,
+    QuizSessionController,
+    QuoteController,
+};
 
 /*
 |--------------------------------------------------------------------------
@@ -14,6 +19,25 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
-    return $request->user();
+Route::post('/login', [AuthController::class, 'login']);
+
+Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function () {
+    Route::apiResource('/quotes', QuoteController::class)->except(['index', 'show']);
+    Route::apiResource('/answers', AnswerController::class)->except(['index', 'show']);
+    Route::post('/register', [AuthController::class, 'register']);
+});
+
+Route::middleware(['auth:sanctum'])->group(function () {
+    Route::prefix('user')->group(function () {
+        Route::post('/logout', [AuthController::class, 'logout']);
+        Route::apiResource('/quotes', QuoteController::class)->only(['index', 'show']);
+        Route::apiResource('/answers', AnswerController::class)->only(['index', 'show']);
+    });
+
+    Route::prefix('quiz')->group(function () {
+        Route::get('/sessions', [QuizSessionController::class, 'getSessions']);
+        Route::post('/start', [QuizSessionController::class, 'startSession']);
+        Route::post('/{session}/answer', [QuizSessionController::class, 'submitAnswer']);
+        Route::post('/end/{sessionId}', [QuizSessionController::class, 'endSession']);
+    });
 });
