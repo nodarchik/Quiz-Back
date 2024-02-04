@@ -48,9 +48,14 @@ class AnswerService
 
     protected function handleMultipleChoiceAnswer(Quote $quote, AnswerRequest $request, Answer $answer = null): JsonResponse|AnswerResource
     {
-        if ($quote->answers()->count() >= 3) {
-            return response()->
-            json(['message' => 'Multiple-choice quotes cannot have more than 3 answers.'], Response::HTTP_BAD_REQUEST);
+        $isUpdating = $answer && $answer->id;
+        $isSameAnswer = $isUpdating && $answer->quote_id == $request->quote_id && strtolower($answer->answer) == strtolower($request->answer);
+
+        // Adjust the count check for multiple-choice to exclude the current answer if updating
+        $answersCount = $quote->answers()->where('id', '!=', $answer?->id)->count();
+
+        if (!$isSameAnswer && $answersCount >= 3) {
+            return response()->json(['message' => 'Multiple-choice quotes cannot have more than 3 answers.'], Response::HTTP_BAD_REQUEST);
         }
 
         $lowerCaseAnswer = strtolower($request->answer);

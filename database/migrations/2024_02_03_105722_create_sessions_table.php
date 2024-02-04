@@ -20,6 +20,7 @@ return new class extends Migration
             $table->timestamp('started_at')->nullable();
             $table->timestamp('ended_at')->nullable();
             $table->integer('score')->nullable();
+            $table->integer('total_questions')->nullable();
             $table->timestamps();
         });
     }

@@ -22,6 +22,8 @@ class SessionResource extends JsonResource
             'mode' => $this->mode,
             'started_at' => $this->started_at,
             'ended_at' => $this->ended_at,
+            'score' => $this->score,
+            'total_questions' => $this->total_questions,
         ];
     }
 }

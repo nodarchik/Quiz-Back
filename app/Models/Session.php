@@ -11,7 +11,7 @@ class Session extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'mode', 'started_at', 'ended_at', 'score'];
+    protected $fillable = ['user_id', 'mode', 'started_at', 'ended_at', 'score', 'total_questions'];
 
     public function user(): BelongsTo
     {
