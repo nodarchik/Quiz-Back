@@ -25,19 +25,22 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     Route::apiResource('/quotes', QuoteController::class)->except(['index', 'show']);
     Route::apiResource('/answers', AnswerController::class)->except(['index', 'show']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::get('/questionnaire', [QuoteController::class, 'questionnaire']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {
     Route::prefix('user')->group(function () {
+        Route::get('/getUser', [AuthController::class, 'getUser']);
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::apiResource('/quotes', QuoteController::class)->only(['index', 'show']);
         Route::apiResource('/answers', AnswerController::class)->only(['index', 'show']);
     });
 
     Route::prefix('quiz')->group(function () {
-        Route::get('/sessions', [QuizSessionController::class, 'getSessions']);
+        Route::get('/session/{sessionId}', [QuizSessionController::class, 'showSession']);
         Route::post('/start', [QuizSessionController::class, 'startSession']);
         Route::post('/{session}/answer', [QuizSessionController::class, 'submitAnswer']);
         Route::post('/end/{sessionId}', [QuizSessionController::class, 'endSession']);
+        Route::get('/end/{sessionId}', [QuizSessionController::class, 'endSessionResults']);
     });
 });

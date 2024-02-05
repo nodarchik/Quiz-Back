@@ -9,29 +9,30 @@ use App\Models\Quote;
 use App\Models\Session;
 use Carbon\Carbon;
 use Exception;
-use Illuminate\Http\JsonResponse;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 use Symfony\Component\HttpFoundation\Response;
 
 class QuizSessionService
 {
-    public function getSessions(): AnonymousResourceCollection
+    public function getSession($sessionId): array
     {
-        $user = Auth::user();
-        $sessions = $user->sessions()->with('userAnswers')->get();
-        return SessionResource::collection($sessions);
+        $session = Session::with('userAnswers')->findOrFail($sessionId);
+        $quotes = $this->getQuotesByType($session->mode);
+        return [
+            'session' => new SessionResource($session),
+            'quotes' => QuoteResource::collection($quotes),
+        ];
     }
 
     public function startSession($mode): array
     {
         $user = Auth::user();
-        $quotes = Quote::with('answers')->where('type', $mode)->inRandomOrder()->limit(10)->get();
-        $session = $user->sessions()->create([
-            'mode' => $mode,
-            'started_at' => Carbon::now(),
-            'total_questions' => $quotes->count(),
-        ]);
+        $quotes = $this->getQuotesByType($mode);
+        $session = $this->createUserSession($user, $mode, count($quotes));
         return [
             'session' => new SessionResource($session),
             'quotes' => QuoteResource::collection($quotes),
@@ -43,67 +44,120 @@ class QuizSessionService
      */
     public function submitAnswer(int $sessionId, int $quoteId, int $answerId): array
     {
-        $session = Session::findOrFail($sessionId);
-        $quote = Quote::with('answers')->findOrFail($quoteId);
-
-        if ($session->user_id != Auth::id()) {
-            throw new \Exception('Unauthorized access to the session.', Response::HTTP_UNAUTHORIZED);
-        }
-
-        if ($session->ended_at) {
-            throw new \Exception('This session has already ended.', 400);
-        }
-
-        $alreadyAnswered = $session->userAnswers()->where('quote_id', $quoteId)->exists();
-        if ($alreadyAnswered) {
-            throw new \Exception('You have already answered this question.', Response::HTTP_BAD_REQUEST);
-        }
-
-        $answer = Answer::where('id', $answerId)->where('quote_id', $quoteId)->firstOrFail();
-        $isCorrect = $answer->is_correct;
-
-        // Record the answer attempt
-        $session->userAnswers()->create([
-            'quote_id' => $quoteId,
-            'answer_id' => $answerId,
-            'is_correct' => $isCorrect,
-        ]);
-
-        $correctAnswer = $quote->answers()->where('is_correct', true)->first();
-
-        // Construct message based on correctness of the user's answer
-        $message = $isCorrect
-            ? 'Correct! The right answer is ' . $answer->answer
-            : 'Sorry, you are wrong! The right answer is ' . $correctAnswer->answer;
-
+        $this->authorizeSession($sessionId);
+        $this->validateSessionState($sessionId);
+        $this->checkAlreadyAnswered($sessionId, $quoteId);
+        $isCorrect = $this->recordAnswer($sessionId, $quoteId, $answerId);
+        $message = $this->constructAnswerResponseMessage($quoteId, $isCorrect, $answerId);
         return [
             'correct' => $isCorrect,
             'message' => $message,
         ];
     }
 
-
     public function endSession(int $sessionId): array
     {
-        $session = Session::with('userAnswers')->findOrFail($sessionId);
-        if ($session->ended_at) {
-            return [
-                'message' => 'This session has already been ended.',
-                'session' => new SessionResource($session)
-            ];
-        }
-        $session->update([
-            'ended_at' => Carbon::now(),
-            'score' => $session->userAnswers->where('is_correct', true)->count(),
+        $session = $this->endAndUpdateSession($sessionId);
+        return $this->prepareSessionDataForResponse($session);
+    }
+
+    private function getQuotesByType($type): Collection|array
+    {
+        return Quote::with('answers')->where('type', $type)->get();
+    }
+
+    private function createUserSession($user, $mode, $totalQuestions): Session
+    {
+        return $user->sessions()->create([
+            'mode' => $mode,
+            'started_at' => Carbon::now(),
+            'total_questions' => $totalQuestions,
         ]);
+    }
 
-        $totalTime = sprintf('%d minutes %d seconds',
-            $session->ended_at->diffInMinutes($session->started_at),
-            $session->ended_at->diffInSeconds($session->started_at) % 60);
+    /**
+     * @throws Exception
+     */
+    private function authorizeSession(int $sessionId): void
+    {
+        $session = Session::findOrFail($sessionId);
+        if ($session->user_id != Auth::id()) {
+            throw new Exception('Unauthorized access to the session.', Response::HTTP_UNAUTHORIZED);
+        }
+    }
 
+    /**
+     * @throws Exception
+     */
+    private function validateSessionState(int $sessionId): void
+    {
+        $session = Session::findOrFail($sessionId);
+        if ($session->ended_at) {
+            throw new Exception('This session has already ended.', 400);
+        }
+    }
+
+    /**
+     * @throws Exception
+     */
+    private function checkAlreadyAnswered($sessionId, $quoteId): void
+    {
+        $session = Session::findOrFail($sessionId);
+        $alreadyAnswered = $session->userAnswers()->where('quote_id', $quoteId)->exists();
+        if ($alreadyAnswered) {
+            throw new Exception('You have already answered this question.', Response::HTTP_BAD_REQUEST);
+        }
+    }
+
+    private function recordAnswer(int $sessionId, int $quoteId, int $answerId)
+    {
+        $answer = Answer::where('id', $answerId)->where('quote_id', $quoteId)->firstOrFail();
+        $session = Session::findOrFail($sessionId);
+        $session->userAnswers()->create([
+            'quote_id' => $quoteId,
+            'answer_id' => $answerId,
+            'is_correct' => $answer->is_correct,
+        ]);
+        return $answer->is_correct;
+    }
+
+    private function constructAnswerResponseMessage(int $quoteId, int $isCorrect, int $answerId): string
+    {
+        $correctAnswer = Answer::where('quote_id', $quoteId)->where('is_correct', true)->first();
+        $userAnswer = Answer::findOrFail($answerId);
+        return $isCorrect
+            ? 'Correct! The right answer is ' . $userAnswer->answer
+            : 'Sorry, you are wrong! The right answer is ' . $correctAnswer->answer;
+    }
+
+    private function endAndUpdateSession($sessionId): Builder|array|Collection|Model
+    {
+        $session = Session::with('userAnswers')->findOrFail($sessionId);
+        if (!$session->ended_at) {
+            $session->ended_at = Carbon::now();
+            $session->score = $session->userAnswers->where('is_correct', true)->count();
+            $session->save();
+        }
+        return $session;
+    }
+
+
+    public function prepareSessionDataForResponse(Session $session): array
+    {
+        $endedAt = Carbon::parse($session->ended_at);
+        $startedAt = Carbon::parse($session->started_at);
+
+        $totalTime = $session->ended_at
+            ? sprintf('%d minutes %d seconds',
+                $endedAt->diffInMinutes($startedAt),
+                $endedAt->diffInSeconds($startedAt) % 60)
+            : 'Session not ended';
+
+        $unansweredQuestions = $session->total_questions - $session->userAnswers->count();
         $sessionData = new SessionResource($session);
         $sessionDataArray = $sessionData->toArray(request());
         $sessionDataArray['total_time'] = $totalTime;
+        $sessionDataArray['unanswered_questions'] = $unansweredQuestions;
 
         return $sessionDataArray;
     }
