@@ -17,9 +17,9 @@ class UserSeeder extends Seeder
         User::create([
             'first_name' => 'Nodar',
             'last_name' => 'Tchikadze',
-            'email' => 'nodaritchikadze@gmail.com',
+            'email' => 'nodaritchikadze@flatrocktech.com',
             'role' => 'admin',
-            'password' => bcrypt('Nodo1234.'),
+            'password' => bcrypt('flatrocktech'),
         ]);
     }
 }

@@ -11,12 +11,17 @@ use Illuminate\Http\Response;
 
 class AnswerService
 {
-    public function storeAnswer(AnswerRequest $request): JsonResponse|AnswerResource
+    public function storeAnswer(AnswerRequest $request, Quote $quote = null, Answer $answer = null): JsonResponse|AnswerResource
     {
         $quote = Quote::findOrFail($request->quote_id);
         if ($request->is_correct && $quote->answers()->where('is_correct', true)->exists()) {
             return response()->
             json(['message' => 'A correct answer already exists for this quote.'], Response::HTTP_BAD_REQUEST);
+        }
+        $existingIncorrectAnswers = $quote->answers()->where('is_correct', false)->count();
+        if ($existingIncorrectAnswers >= 2 && !$request->is_correct) {
+            return response()->
+            json(['message' => "At least one answer must be correct"], Response::HTTP_BAD_REQUEST);
         }
         return match ($quote->type) {
             'binary' => $this->handleBinaryAnswer($quote, $request),
@@ -59,7 +64,7 @@ class AnswerService
         }
 
         $lowerCaseAnswer = strtolower($request->answer);
-        if ($quote->answers()->whereRaw('LOWER(answer) = ?', [$lowerCaseAnswer])->exists()) {
+        if ($quote->answers()->where('id', '!=', $answer?->id)->whereRaw('LOWER(answer) = ?', [$lowerCaseAnswer])->exists()) {
             return response()->
             json(['message' => "This answer already exists"], Response::HTTP_BAD_REQUEST);
         }
@@ -73,23 +78,26 @@ class AnswerService
         return $this->createAnswer($quote, $request);
     }
 
-    protected function createAnswer(Quote $quote, AnswerRequest $request): AnswerResource
+    protected function createAnswer(Quote $quote, AnswerRequest $request, Answer $answer = null): AnswerResource
     {
-        $answer = $quote->answers()->create([
-            'answer' => $request->answer,
-            'is_correct' => $request->is_correct,
-        ]);
+        if ($answer) {
+            $answer->update([
+                'answer' => $request->answer,
+                'is_correct' => $request->is_correct,
+            ]);
+        } else {
+            $answer = $quote->answers()->create([
+                'answer' => $request->answer,
+                'is_correct' => $request->is_correct,
+            ]);
+        }
 
         return new AnswerResource($answer);
     }
+
     public function updateAnswer(AnswerRequest $request, Answer $answer): JsonResponse|AnswerResource
     {
         $quote = Quote::findOrFail($request->quote_id);
-
-        return match ($quote->type) {
-            'binary' => $this->handleBinaryAnswer($quote, $request, $answer),
-            'multiple_choice' => $this->handleMultipleChoiceAnswer($quote, $request, $answer),
-            default => response()->json(['message' => 'Invalid quote type.'], Response::HTTP_BAD_REQUEST),
-        };
+        return $this->createAnswer($quote, $request, $answer);
     }
 }

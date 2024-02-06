@@ -2,8 +2,10 @@
 
 namespace App\Services;
 
+use App\Http\Requests\Session\StartSessionRequest;
 use App\Http\Resources\QuoteResource;
 use App\Http\Resources\SessionResource;
+use App\Http\Resources\UserResource;
 use App\Models\Answer;
 use App\Models\Quote;
 use App\Models\Session;
@@ -28,11 +30,21 @@ class QuizSessionService
         ];
     }
 
-    public function startSession($mode): array
+    public function startSession(StartSessionRequest $request): array
     {
+        $mode = $request->input('mode', 'binary');
         $user = Auth::user();
+
+        $activeSessions = $user->sessions()->whereNull('ended_at')->get();
+
+        foreach ($activeSessions as $activeSession) {
+            $activeSession->ended_at = now();
+            $activeSession->save();
+        }
+
         $quotes = $this->getQuotesByType($mode);
         $session = $this->createUserSession($user, $mode, count($quotes));
+
         return [
             'session' => new SessionResource($session),
             'quotes' => QuoteResource::collection($quotes),
@@ -125,6 +137,11 @@ class QuizSessionService
     {
         $correctAnswer = Answer::where('quote_id', $quoteId)->where('is_correct', true)->first();
         $userAnswer = Answer::findOrFail($answerId);
+
+        if (!$userAnswer || !$correctAnswer) {
+            throw new Exception('Answer not found.', Response::HTTP_NOT_FOUND);
+        }
+
         return $isCorrect
             ? 'Correct! The right answer is ' . $userAnswer->answer
             : 'Sorry, you are wrong! The right answer is ' . $correctAnswer->answer;
@@ -140,7 +157,6 @@ class QuizSessionService
         }
         return $session;
     }
-
 
     public function prepareSessionDataForResponse(Session $session): array
     {
@@ -160,5 +176,48 @@ class QuizSessionService
         $sessionDataArray['unanswered_questions'] = $unansweredQuestions;
 
         return $sessionDataArray;
+    }
+
+    public function getAllSessionsEndResults(): array
+    {
+        $sessions = Session::with('user')->get();
+        $results = [];
+        foreach ($sessions as $session) {
+            $sessionData = $this->prepareSessionDataForResponse($session);
+            $sessionData['user'] = new UserResource($session->user);
+            $results[] = $sessionData;
+        }
+        return $results;
+    }
+
+    public function getTopScorers(): array
+    {
+        $sessions = Session::with('user')
+            ->whereNotNull('score') // Ensure the session is completed
+            ->get()
+            ->map(function ($session) {
+                // Convert total_time to a more readable format
+                $endedAt = Carbon::parse($session->ended_at);
+                $startedAt = Carbon::parse($session->started_at);
+
+                $totalTime = $session->ended_at
+                    ? sprintf('%d minutes %d seconds',
+                        $endedAt->diffInMinutes($startedAt),
+                        $endedAt->diffInSeconds($startedAt) % 60)
+                    : 'Session not ended';
+
+                return [
+                    'first_name' => $session->user->first_name,
+                    'last_name' => $session->user->last_name,
+                    'email' => $session->user->email,
+                    'total_score' => $session->score,
+                    'total_time' => $totalTime,
+                ];
+            })
+            ->sortByDesc('total_score')
+            ->values() // Reset the keys after sorting
+            ->all();
+
+        return $sessions;
     }
 }

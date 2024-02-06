@@ -40,7 +40,8 @@ class AuthService
         return response()->json([
             'user' => new UserResource($user),
             'token' => $token
-        ]);    }
+        ]);
+    }
 
     public function logout(): JsonResponse
     {

@@ -19,8 +19,7 @@ class AnswerResource extends JsonResource
             'id' => $this->id,
             'quote_id' => $this->quote_id,
             'answer' => $this->answer,
-//            'is_correct' => $this->is_correct,
-//           currently we hide this line to avoid leaking the answer
+            'is_correct' => $this->is_correct,
         ];
     }
 }

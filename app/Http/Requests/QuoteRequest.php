@@ -25,7 +25,6 @@ class QuoteRequest extends FormRequest
     {
         return [
             'quote' => 'required|string|max:255',
-            'type' => 'required|in:binary,multiple_choice',
         ];
     }
 }

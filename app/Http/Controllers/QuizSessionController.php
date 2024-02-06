@@ -17,35 +17,37 @@ class QuizSessionController extends Controller
 
     public function showSession(int $sessionId): JsonResponse
     {
-        $data = $this->service->getSession($sessionId);
-        return response()->json($data);
+        return response()->json($this->service->getSession($sessionId));
     }
 
     public function startSession(StartSessionRequest $request): JsonResponse
     {
-        $data = $this->service->startSession($request->input('mode', 'binary'));
-        return response()->json($data, Response::HTTP_CREATED);
+        return response()->json($this->service->startSession($request), Response::HTTP_CREATED);
     }
 
     public function submitAnswer(SubmitAnswerRequest $request, int $sessionId): JsonResponse
     {
-        try {
-            $result = $this->service->submitAnswer($sessionId, $request->quote_id, $request->answer_id);
-            return response()->json($result);
-        } catch (\Exception $e) {
-            return response()->json(['message' => $e->getMessage()],
-                $e->getCode() ?: Response::HTTP_INTERNAL_SERVER_ERROR);
-        }
+        return response()->json($this->service->submitAnswer($sessionId, $request->quote_id, $request->answer_id));
     }
 
     public function endSession(int $sessionId): array
     {
         return $this->service->endSession($sessionId);
     }
+
     public function endSessionResults(int $sessionId): JsonResponse
     {
         $session = Session::with('userAnswers')->findOrFail($sessionId);
         $data = $this->service->prepareSessionDataForResponse($session);
         return response()->json($data);
+    }
+    public function guestUserHistory(): JsonResponse
+    {
+        return response()->json($this->service->getAllSessionsEndResults());
+    }
+    public function topScorers(): JsonResponse
+    {
+        $topScorers = $this->service->getTopScorers();
+        return response()->json($topScorers);
     }
 }

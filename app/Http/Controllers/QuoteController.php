@@ -18,9 +18,21 @@ class QuoteController extends Controller
         $quotes = Quote::all();
         return QuoteResource::collection($quotes);
     }
-    public function questionnaire(): AnonymousResourceCollection
+    public function getQuestionnaireById($id): QuoteResource
     {
-        $quotes = Quote::has('answers')->with('answers')->get();
+        $quote = Quote::where('id', $id)->has('answers')->with('answers')->first();
+        return new QuoteResource($quote);
+    }
+    public function getBinaryQuestionnaire(Request $request): AnonymousResourceCollection
+    {
+        $perPage = $request->get('pagination', 10);
+        $quotes = Quote::where('type', 'binary')->has('answers')->with('answers')->paginate($perPage);
+        return QuoteResource::collection($quotes);
+    }
+    public function getMultipleChoiceQuestionnaire(Request $request): AnonymousResourceCollection
+    {
+        $perPage = $request->get('pagination', 10);
+        $quotes = Quote::where('type', 'multiple_choice')->has('answers')->with('answers')->paginate($perPage);
         return QuoteResource::collection($quotes);
     }
     public function store(QuoteRequest $request): QuoteResource

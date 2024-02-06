@@ -25,7 +25,10 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     Route::apiResource('/quotes', QuoteController::class)->except(['index', 'show']);
     Route::apiResource('/answers', AnswerController::class)->except(['index', 'show']);
     Route::post('/register', [AuthController::class, 'register']);
-    Route::get('/questionnaire', [QuoteController::class, 'questionnaire']);
+    Route::get('/questionnaires/{id}', [QuoteController::class, 'getQuestionnaireById']);
+    Route::get('/questionnaires', [QuoteController::class, 'getBinaryQuestionnaire']);
+    Route::get('/questionnaires', [QuoteController::class, 'getMultipleChoiceQuestionnaire']);
+    Route::get('/quiz/history', [QuizSessionController::class, 'guestUserHistory']);
 });
 
 Route::middleware(['auth:sanctum'])->group(function () {
@@ -34,6 +37,7 @@ Route::middleware(['auth:sanctum'])->group(function () {
         Route::post('/logout', [AuthController::class, 'logout']);
         Route::apiResource('/quotes', QuoteController::class)->only(['index', 'show']);
         Route::apiResource('/answers', AnswerController::class)->only(['index', 'show']);
+        Route::get('/top-scorers', [QuizSessionController::class, 'topScorers']);
     });
 
     Route::prefix('quiz')->group(function () {
