@@ -25,9 +25,9 @@ Route::middleware(['auth:sanctum', 'admin'])->prefix('admin')->group(function ()
     Route::apiResource('/quotes', QuoteController::class)->except(['index', 'show']);
     Route::apiResource('/answers', AnswerController::class)->except(['index', 'show']);
     Route::post('/register', [AuthController::class, 'register']);
+    Route::get('/questionnaires/binary', [QuoteController::class, 'getBinaryQuestionnaire']);
+    Route::get('/questionnaires/multiple-choice', [QuoteController::class, 'getMultipleChoiceQuestionnaire']);
     Route::get('/questionnaires/{id}', [QuoteController::class, 'getQuestionnaireById']);
-    Route::get('/questionnaires', [QuoteController::class, 'getBinaryQuestionnaire']);
-    Route::get('/questionnaires', [QuoteController::class, 'getMultipleChoiceQuestionnaire']);
     Route::get('/quiz/history', [QuizSessionController::class, 'guestUserHistory']);
 });
 
